@@ -199,14 +199,30 @@ else
             # Extract validator index from the exit message and rename file
             validator_index=$(jq -r '.message.validator_index' "$output_file" 2>/dev/null)
             if [ "$validator_index" != "null" ] && [ -n "$validator_index" ]; then
-                new_filename="$OUT_DIR/mnemonic-${i}-validator-${validator_index}-exit.json"
+                # Get public key from mnemonic and path
+                if [ -z "$MNEMONIC_PASSPHRASE" ]; then
+                    pubkey_full=$("$ETHDO" validator credentials --mnemonic "$MNEMONIC" --path "m/12381/3600/$i/0/0" --show-pubkey 2>/dev/null || echo "")
+                else
+                    pubkey_full=$("$ETHDO" validator credentials --mnemonic "$MNEMONIC" --passphrase "$MNEMONIC_PASSPHRASE" --path "m/12381/3600/$i/0/0" --show-pubkey 2>/dev/null || echo "")
+                fi
+                
+                # Extract first 10 characters of public key
+                if [ -n "$pubkey_full" ]; then
+                    pubkey_short=$(echo "$pubkey_full" | head -c 12)  # 0x + 10 chars
+                    new_filename="$OUT_DIR/${i}-${pubkey_short}-${validator_index}-exit.json"
+                else
+                    new_filename="$OUT_DIR/${i}-${validator_index}-exit.json"
+                fi
                 mv "$output_file" "$new_filename"
                 echo "✓ Created $(basename "$new_filename")"
+                ((success++))
+                echo "   Progress: $success of $TOTAL_COUNT messages created"
             else
-                echo "✓ Created $(basename "$output_file")"
+                echo "✗ No validator found at index $i (validator doesn't exist)"
+                rm -f "$output_file"
+                ((failed++))
+                echo "   Progress: $success successful, $failed failed, $((success + failed)) of $TOTAL_COUNT processed"
             fi
-            ((success++))
-            echo "   Progress: $success of $TOTAL_COUNT messages created"
         else
             echo "✗ Failed to create exit message (exit code: $exit_code):"
             cat "$output_file"
