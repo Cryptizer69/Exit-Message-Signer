@@ -197,19 +197,25 @@ else
         
         if [ $exit_code -eq 0 ]; then
             # Extract validator index from the exit message and rename file
-            validator_index=$(jq -r '.message.validator_index' "$output_file" 2>/dev/null)
+            if command -v jq >/dev/null 2>&1; then
+                validator_index=$(jq -r '.message.validator_index' "$output_file" 2>/dev/null)
+            else
+                # Fallback without jq - extract validator_index using grep and sed
+                validator_index=$(grep -o '"validator_index":"[^"]*"' "$output_file" 2>/dev/null | sed 's/.*"validator_index":"\([^"]*\)".*/\1/')
+            fi
+            
             if [ "$validator_index" != "null" ] && [ -n "$validator_index" ]; then
-                # Get public key from mnemonic and path
+                # Get public key using account derive
                 if [ -z "$MNEMONIC_PASSPHRASE" ]; then
-                    pubkey_full=$("$ETHDO" validator credentials --mnemonic "$MNEMONIC" --path "m/12381/3600/$i/0/0" --show-pubkey 2>/dev/null || echo "")
+                    pubkey_full=$("$ETHDO" account derive --mnemonic "$MNEMONIC" --path "m/12381/3600/$i/0/0" 2>/dev/null | grep "Public key:" | cut -d' ' -f3)
                 else
-                    pubkey_full=$("$ETHDO" validator credentials --mnemonic "$MNEMONIC" --passphrase "$MNEMONIC_PASSPHRASE" --path "m/12381/3600/$i/0/0" --show-pubkey 2>/dev/null || echo "")
+                    pubkey_full=$("$ETHDO" account derive --mnemonic "$MNEMONIC" --passphrase "$MNEMONIC_PASSPHRASE" --path "m/12381/3600/$i/0/0" 2>/dev/null | grep "Public key:" | cut -d' ' -f3)
                 fi
                 
-                # Extract first 10 characters of public key
-                if [ -n "$pubkey_full" ]; then
-                    pubkey_short=$(echo "$pubkey_full" | head -c 12)  # 0x + 10 chars
-                    new_filename="$OUT_DIR/${i}-${pubkey_short}-${validator_index}-exit.json"
+                # Use same format as keystore method
+                if [ -n "$pubkey_full" ] && [[ "$pubkey_full" =~ ^0x ]]; then
+                    # Same format as keystore: first 12 chars -- last part
+                    new_filename="$OUT_DIR/${pubkey_full:0:12}--${pubkey_full:90}-exit.json"
                 else
                     new_filename="$OUT_DIR/${i}-${validator_index}-exit.json"
                 fi
