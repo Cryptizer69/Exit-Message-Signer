@@ -214,9 +214,11 @@ else
                 
                 # Use same format as keystore method
                 if [ -n "$pubkey_full" ] && [[ "$pubkey_full" =~ ^0x ]]; then
-                    # Same format as keystore: first 12 chars -- last part
+                    # Same format as keystore: first 12 chars -- last part  
                     new_filename="$OUT_DIR/${pubkey_full:0:12}--${pubkey_full:90}-exit.json"
                 else
+                    # Fallback if pubkey extraction fails - still create valid exit message
+                    echo "   Warning: Could not extract public key for validator $validator_index, using fallback filename"
                     new_filename="$OUT_DIR/${i}-${validator_index}-exit.json"
                 fi
                 mv "$output_file" "$new_filename"
@@ -225,6 +227,13 @@ else
                 echo "   Progress: $success of $TOTAL_COUNT messages created"
             else
                 echo "✗ No validator found at index $i (validator doesn't exist)"
+                echo "   Debug: Contents of exit message file:"
+                if [ -f "$output_file" ]; then
+                    cat "$output_file" | head -10  # Show first 10 lines of the file
+                    echo "   Debug: File size: $(wc -c < "$output_file") bytes"
+                else
+                    echo "   Debug: No output file was created"
+                fi
                 rm -f "$output_file"
                 ((failed++))
                 echo "   Progress: $success successful, $failed failed, $((success + failed)) of $TOTAL_COUNT processed"
